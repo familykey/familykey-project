@@ -283,7 +283,7 @@ npm run preview
 
 ## 🤝 团队与联系
 
-Family Key 共 2 名核心成员，分别负责产品前端与合约后端，均拥有 3 年 Web3 从业与开发经验，曾在 ETH Beijing 与 ETH Hong Kong 获奖。我们相信区块链可以让世界更加美好，去中心化的事业是伟大的。
+Family Key 共 2 名核心成员，分别负责产品前端与合约后端，均拥有**2年半**Web3 从业与开发经验，曾在 ETH Beijing 与 ETH Hong Kong 获奖。我们相信区块链可以让世界更加美好，去中心化的事业是伟大的。
 
 如需合作、反馈或了解最新进展，欢迎：
 - 在 GitHub 项目的 Issues 中提交问题或建议
