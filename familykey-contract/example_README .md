@@ -63,12 +63,6 @@ Family Key 是一个基于区块链技术的去中心化加密资产信托平台
 - **Chain ID**：84532
 - **RPC URL**：配置在环境变量 `VITE_RPC_URL`
 
-### 智能合约部署
-
-- **模块名称**：`familykey-contract/src/DeadManSwitchModule.sol`
-- **部署网络**：Base Sepolia 测试网
-- **合约地址**：[`0xB1c97e9dFd770f9481d5065898e3B2CCa149242f`](https://base-sepolia.blockscout.com/address/0xB1c97e9dFd770f9481d5065898e3B2CCa149242f)
-
 ### 架构图
 
 ```mermaid
@@ -267,19 +261,6 @@ npm run preview
 
 ---
 
-## 🤝 团队与联系
-
-Family Key 团队由智能合约工程师、全栈开发者和产品设计师组成，专注于打造安全、可扩展的 Web3 继承基础设施。
-
-- **专业背景**：核心成员拥有多链 dApp 交付与安全审计经验，对资产托管与传承场景有深入理解
-- **使命愿景**：让加密资产的信托与继承流程像传统金融服务一样可信、透明、易用
-
-如需合作、反馈或了解最新进展，欢迎：
-- 在 GitHub 项目的 Issues 中提交问题或建议
-- 发送邮件至 `team@familykey.dev`（团队公共邮箱，可按需更新）
-
----
-
 ## 📁 项目结构
 
 ```
@@ -346,7 +327,7 @@ familykey-frontend/
 
 **部署流程**：
 - 步骤 1：部署 Safe Proxy（需要签名）
-- 步骤 2：部署 Dead Man's Switch 模块
+- 步骤 2：后端部署 Dead Man's Switch 模块
 - 步骤 3：启用模块（需要签名）
 
 #### 心跳签到
