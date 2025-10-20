@@ -7,7 +7,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue.svg)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-18.2-61dafb.svg)](https://reactjs.org/)
 [![Vite](https://img.shields.io/badge/Vite-5.4-646cff.svg)](https://vitejs.dev/)
-[![License](https://img.shields.io/badge/License-Private-red.svg)]()
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 </div>
 
@@ -607,7 +607,7 @@ const overviewQuery = useQuery<OverviewResponse>({
 
 ## 📄 许可证
 
-本项目为私有项目，版权所有。未经授权不得使用、复制或分发。
+本项目基于 [MIT License](LICENSE) 发布，您可以自由使用、复制、修改和分发本代码，但需保留原作者版权声明和许可声明。
 
 ---
 

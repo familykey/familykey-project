@@ -7,7 +7,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue.svg)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-18.2-61dafb.svg)](https://reactjs.org/)
 [![Vite](https://img.shields.io/badge/Vite-5.4-646cff.svg)](https://vitejs.dev/)
-[![License](https://img.shields.io/badge/License-Private-red.svg)]()
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 </div>
 
@@ -609,7 +609,7 @@ Please open a GitHub issue and include:
 
 ## 📄 License
 
-This is a private project. All rights reserved. Unlicensed use, copying, or distribution is prohibited.
+This project is released under the [MIT License](LICENSE). You may use, copy, modify, and distribute the code, provided that the original copyright and license notices remain.
 
 ---
 
