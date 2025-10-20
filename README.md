@@ -464,8 +464,7 @@ const overviewQuery = useQuery<OverviewResponse>({
 ### 本地测试
 
 1. **确保有测试网 ETH**
-   - 访问 [Base Sepolia 水龙头](https://www.coinbase.com/faucets/base-ethereum-sepolia-faucet)
-   - 或使用 [Alchemy 水龙头](https://sepoliafaucet.com/)
+   - 访问 [Alchemy 水龙头](https://www.alchemy.com/faucets/base-sepolia)
 
 2. **测试完整流程**
    - 委托人：连接钱包 → 邀请受益人 → 创建基金 → 存入资产 → 心跳签到
