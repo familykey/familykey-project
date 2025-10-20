@@ -17,18 +17,32 @@
 
 ---
 
-## 📖 Overview
+## 📖 Overview 
 
-Family Key is a decentralized crypto asset trust platform built on blockchain technology. It addresses the challenges of crypto inheritance by combining smart contracts with Safe multi-signature wallets to deliver an automated, censorship-resistant inheritance flow.
+Leave a key to your family; don’t let crypto be lost forever.
 
-### Key Features
+Family Key is a decentralized smart-contract family fund designed so your family can safely inherit crypto if an accident happens. Built on Safe smart accounts and our Dead Man’s Switch module, it removes centralized intermediaries while keeping the experience humane and practical.
 
-- 🔐 **Secure & Reliable**: Powered by Safe (formerly Gnosis Safe), the industry-standard multi-signature custody solution
-- ⏰ **Heartbeat Monitoring**: Periodic check-ins verify the owner’s vitality and ensure the inheritance process triggers at the right time
-- 🛡️ **Challenge-Period Protection**: Gives the owner sufficient time to cancel a mistakenly triggered inheritance flow
-- 🌐 **Fully Decentralized**: No trusted third parties—every step is guaranteed by smart contracts
-- 🌍 **Bilingual UI**: Seamless switching between Chinese and English interfaces
-- 📱 **Responsive Design**: Optimized for both desktop and mobile experiences
+### Pain Points
+
+- Crypto wealth is concentrated on-chain; accidents can cause major family losses.
+- Families aren’t crypto‑savvy; delegating seed/wallet custody is unsafe and error‑prone.
+- Centralized custody requires single‑point trust and often fees/taxes; anti‑decentralization.
+
+### Solution
+
+1. Use Safe smart account as the base, integrating our Dead Man’s Switch module.
+2. Owner periodically refreshes heartbeat; once it stops, beneficiary gains smart wallet permissions.
+3. Beneficiary logs in via email/phone (Privy); zero crypto barrier; auto‑generated self‑custody wallet.
+4. Humanized experience with invites and expiry reminders (Email/SMS/Push).
+
+### APIs & Sequence
+
+- `checkIn()`: Owner refreshes heartbeat and clears `claimReadyAt`.
+- `startClaim()`: Beneficiary triggers challenge period and sets `claimReadyAt`.
+- `cancelClaim()`: Owner cancels inheritance during challenge period and checks in.
+- `finalizeClaim()`: Beneficiary performs Safe `swapOwner` to transfer ownership.
+- `status()`: Read `lastCheckIn`, `heartbeatInterval`, `claimReadyAt`.
 
 ---
 
@@ -269,14 +283,11 @@ npm run preview
 
 ## 🤝 Team & Contact
 
-The Family Key team brings together smart-contract engineers, full-stack developers, and product strategists dedicated to building secure, scalable Web3 inheritance infrastructure.
+Family Key has 2 core members, responsible for product frontend and contract backend. Both have 3 years of Web3 experience and have won awards at ETH Beijing and ETH Hong Kong. We believe blockchain can make the world better, and decentralization is a great endeavor.
 
-- **Expertise**: Hands-on experience with multi-chain dApps, security reviews, and user-centric product delivery
-- **Mission**: Deliver trust-grade, transparent, and intuitive inheritance flows for digital assets
-
-We welcome collaborations, feedback, and community support:
+We welcome collaborations, feedback, and updates:
 - Open an Issue on GitHub to report bugs or share ideas
-- Email `team@familykey.dev` (shared inbox, update as needed)
+- Email `bitgoodwill@gmail.com`
 
 ---
 
