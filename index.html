@@ -89,21 +89,21 @@
           <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div class="node">
               <div class="rounded-lg overflow-hidden mb-3 bg-white">
-                <img src="public/MELLON.png" alt="马修·梅隆" class="w-full h-40 object-contain" />
+                <img src="/public/MELLON.png" alt="马修·梅隆" class="w-full h-40 object-contain" />
               </div>
               <div class="font-semibold mb-1 text-[var(--color-dark)]">马修·梅隆</div>
               <p class="text-[var(--color-dark)]">2018年，马修·梅隆因心脏病去世；其约10亿美元 XRP 资产因私钥分散且未告知家人而无法动用。</p>
             </div>
             <div class="node">
               <div class="rounded-lg overflow-hidden mb-3 bg-white">
-                <img src="public/Popescu.png" alt="米尔恰·波佩斯库" class="w-full h-40 object-contain" />
+                <img src="/public/Popescu.png" alt="米尔恰·波佩斯库" class="w-full h-40 object-contain" />
               </div>
               <div class="font-semibold mb-1 text-[var(--color-dark)]">米尔恰·波佩斯库</div>
               <p class="text-[var(--color-dark)]">2021年，米尔恰·波佩斯库在哥斯达黎加溺亡；其超过10亿美元比特币因缺乏可用密钥无法取回。</p>
             </div>
             <div class="node">
               <div class="rounded-lg overflow-hidden mb-3 bg-white">
-                <img src="public/Moody.png" alt="马修·穆迪" class="w-full h-40 object-contain" />
+                <img src="/public/Moody.png" alt="马修·穆迪" class="w-full h-40 object-contain" />
               </div>
               <div class="font-semibold mb-1 text-[var(--color-dark)]">马修·穆迪</div>
               <p class="text-[var(--color-dark)]">2013年，比特币矿工马修·穆迪在飞行事故中去世；其家人无法获取其比特币遗产。</p>
@@ -117,21 +117,21 @@
           <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div class="node">
               <div class="rounded-lg overflow-hidden mb-3 bg-white">
-                <img src="public/MELLON.png" alt="Matthew Mellon" class="w-full h-40 object-contain" />
+                <img src="/public/MELLON.png" alt="Matthew Mellon" class="w-full h-40 object-contain" />
               </div>
               <div class="font-semibold mb-1 text-[var(--color-dark)]">Matthew Mellon</div>
               <p class="text-[var(--color-dark)]">In 2018, Matthew Mellon died of a heart attack; his ~$1B XRP fortune became inaccessible due to scattered keys and no family disclosure.</p>
             </div>
             <div class="node">
               <div class="rounded-lg overflow-hidden mb-3 bg-white">
-                <img src="public/Popescu.png" alt="Mircea Popescu" class="w-full h-40 object-contain" />
+                <img src="/public/Popescu.png" alt="Mircea Popescu" class="w-full h-40 object-contain" />
               </div>
               <div class="font-semibold mb-1 text-[var(--color-dark)]">Mircea Popescu</div>
               <p class="text-[var(--color-dark)]">In 2021, Mircea Popescu drowned in Costa Rica; his >$1B Bitcoin could not be recovered without usable keys.</p>
             </div>
             <div class="node">
               <div class="rounded-lg overflow-hidden mb-3 bg-white">
-                <img src="public/Moody.png" alt="Matthew Moody" class="w-full h-40 object-contain" />
+                <img src="/public/Moody.png" alt="Matthew Moody" class="w-full h-40 object-contain" />
               </div>
               <div class="font-semibold mb-1 text-[var(--color-dark)]">Matthew Moody</div>
               <p class="text-[var(--color-dark)]">In 2013, bitcoin miner Matthew Moody died in a plane crash; his family could not access the inherited bitcoins.</p>
@@ -220,7 +220,7 @@
             <ul class="space-y-3 text-lg">
               <li>1. 以 Safe 智能账户为载体，接入自研 Dead Man’s Switch 模块。</li>
               <li>2. 委托人定期重启心跳；心跳终止后受益人获得智能合约钱包权限。</li>
-              <li>3. 受益人用邮箱/手机登录（Privy），零加密门槛，自动生成自托管钱包。</li>
+              <li>3. 受益人用邮箱/手机登录（Privy/Particle），零加密门槛，自动生成自托管钱包。</li>
               <li>4. 通过邀请、到期提醒（Email/SMS/Push）使产品人性化。</li>
             </ul>
           </div>
@@ -229,7 +229,7 @@
             <ul class="space-y-3 text-lg">
               <li>1. Use Safe smart account as the base, integrating our Dead Man’s Switch module.</li>
               <li>2. Owner periodically refreshes heartbeat; once it stops, beneficiary gains smart wallet permissions.</li>
-              <li>3. Beneficiary logs in via email/phone (Privy); zero crypto barrier; auto-generated self-custody wallet.</li>
+              <li>3. Beneficiary logs in via email/phone (Privy/Particle); zero crypto barrier; auto-generated self-custody wallet.</li>
               <li>4. Humanized experience with invites and expiry reminders (Email/SMS/Push).</li>
             </ul>
           </div>
@@ -240,7 +240,7 @@
             <ol class="space-y-2 text-lg list-decimal ml-5">
               <li><code>checkIn()</code>：Owner 刷新心跳（同时清除 <code>claimReadyAt</code>）。</li>
               <li><code>startClaim()</code>：Beneficiary 触发挑战期，设置 <code>claimReadyAt</code>。</li>
-              <li><code>cancelClaim()</code>：Owner 在挑战期内取消继承并签到。</li>
+              <!-- <li><code>cancelClaim()</code>：Owner 在挑战期内取消继承并签到。</li> -->
               <li><code>finalizeClaim()</code>：Beneficiary 执行 Safe <code>swapOwner</code> 完成过户。</li>
               <li><code>status()</code>：读取 <code>lastCheckIn</code>/<code>heartbeatInterval</code>/<code>claimReadyAt</code>.</li>
             </ol>
@@ -250,7 +250,7 @@
             <ol class="space-y-2 text-lg list-decimal ml-5">
               <li><code>checkIn()</code>: Owner refresh heartbeat (also clears <code>claimReadyAt</code>).</li>
               <li><code>startClaim()</code>: Beneficiary triggers challenge period and sets <code>claimReadyAt</code>.</li>
-              <li><code>cancelClaim()</code>: Owner cancels inherit during challenge and checks in.</li>
+              <!-- <li><code>cancelClaim()</code>: Owner cancels inherit during challenge and checks in.</li> -->
               <li><code>finalizeClaim()</code>: Beneficiary performs Safe <code>swapOwner</code> to transfer ownership.</li>
               <li><code>status()</code>: Read <code>lastCheckIn</code>/<code>heartbeatInterval</code>/<code>claimReadyAt</code>.</li>
             </ol>
@@ -301,10 +301,10 @@
         <!-- Registration screenshots -->
         <div class="mt-8 flex flex-row gap-6 justify-center items-start">
           <div class="flex-1 flex justify-center">
-            <img src="public/受益人注册.png" alt="受益人注册" class="rounded-xl shadow border border-black/10 bg-white/40 p-2 h-48 md:h-64 object-contain" loading="lazy" />
+            <img src="/public/受益人注册.png" alt="受益人注册" class="rounded-xl shadow border border-black/10 bg-white/40 p-2 h-48 md:h-64 object-contain" loading="lazy" />
           </div>
           <div class="flex-1 flex justify-center">
-            <img src="public/受益人登记.png" alt="受益人登记" class="rounded-xl shadow border border-black/10 bg-white/40 p-2 h-48 md:h-64 object-contain" loading="lazy" />
+            <img src="/public/受益人登记.png" alt="受益人登记" class="rounded-xl shadow border border-black/10 bg-white/40 p-2 h-48 md:h-64 object-contain" loading="lazy" />
           </div>
         </div>
       </div>
@@ -350,17 +350,17 @@
           </div>
           <div class="arrow">→</div>
           <div class="node">
-            <div class="lang-zh active"> <code>定期心跳签到</div>
+            <div class="lang-zh active"> <code>定期心跳签到</code></div>
             <div class="lang-en">Check in heartbeat in time</div>
           </div>
         </div>
         <!-- Owner setup screenshots -->
         <div class="mt-8 flex flex-row gap-6 justify-center items-start">
           <div class="flex-1 flex justify-center">
-            <img src="public/邀请和创建基金.png" alt="邀请和创建基金" class="rounded-xl shadow border border-black/10 bg-white/40 p-2 h-48 md:h-64 object-contain" loading="lazy" />
+            <img src="/public/邀请和创建基金.png" alt="邀请和创建基金" class="rounded-xl shadow border border-black/10 bg-white/40 p-2 h-48 md:h-64 object-contain" loading="lazy" />
           </div>
           <div class="flex-1 flex justify-center">
-            <img src="public/心跳签到.png" alt="心跳签到" class="rounded-xl shadow border border-black/10 bg-white/40 p-2 h-48 md:h-64 object-contain" loading="lazy" />
+            <img src="/public/心跳签到.png" alt="心跳签到" class="rounded-xl shadow border border-black/10 bg-white/40 p-2 h-48 md:h-64 object-contain" loading="lazy" />
           </div>
         </div>
       </div>
@@ -421,6 +421,42 @@
       </div>
     </section> -->
 
+    <!-- Flowchart: Fund Inheritance -->
+    <section class="slide relative snap-center flex items-center justify-center">
+      <div class="absolute top-6 left-6 z-40">
+        <div class="lang-zh active"><span class="px-4 py-2 rounded-md bg-black/40 text-white text-lg md:text-xl shadow">产品流程：基金继承</span></div>
+        <div class="lang-en"><span class="px-4 py-2 rounded-md bg-black/40 text-white text-lg md:text-xl shadow">Product Flow: Fund Inheritance</span></div>
+      </div>
+      <div class="max-w-7xl p-8 w-full">
+        <div class="lang-zh active">
+          <h2 class="text-3xl font-bold mb-6">基金继承流程</h2>
+        </div>
+        <div class="lang-en">
+          <h2 class="text-3xl font-bold mb-6">Fund Inheritance Flow</h2>
+        </div>
+        <div class="grid-flow">
+          <div class="node"><div class="lang-zh active">委托人失去心跳</div><div class="lang-en">Owner loses heartbeat</div></div>
+          <div class="arrow">→</div>
+          <div class="node"><div class="lang-zh active">受益人收到通知</div><div class="lang-en">Beneficiary receives notification</div></div>
+          <div class="arrow">→</div>
+          <div class="node"><div class="lang-zh active">受益人发起继承</div><div class="lang-en">Beneficiary initiates inheritance</div></div>
+          <div class="arrow">→</div>
+          <div class="node"><div class="lang-zh active">经过挑战期</div><div class="lang-en">Challenge period</div></div>
+          <div class="arrow">→</div>
+          <div class="node"><div class="lang-zh active">受益人完成继承</div><div class="lang-en">Beneficiary completes inheritance</div></div>
+        </div>
+        <!-- Inheritance screenshots -->
+        <div class="mt-8 flex flex-row gap-6 justify-center items-start">
+          <div class="flex-1 flex justify-center">
+            <img src="/public/委托人失去心跳.png" alt="委托人失去心跳" class="rounded-xl shadow border border-black/10 bg-white/40 p-2 h-48 md:h-64 object-contain" loading="lazy" />
+          </div>
+          <div class="flex-1 flex justify-center">
+            <img src="/public/受益人继承基金.png" alt="受益人继承基金" class="rounded-xl shadow border border-black/10 bg-white/40 p-2 h-48 md:h-64 object-contain" loading="lazy" />
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Advantages & Security -->
     <section class="slide relative snap-center flex items-center justify-center">
       <div class="absolute top-6 left-6 z-40">
@@ -479,13 +515,52 @@
               </svg>
             </div>
             <div class="space-y-2">
-              <div class="lang-zh active font-semibold text-lg md:text-xl">协议可拓展：支持加密资产信托、家庭基金等 DeFi 应用</div>
+              <div class="lang-zh active font-semibold text-lg md:text-xl">协议可拓展：支持去中心化加密资产信托等 DeFi 应用</div>
               <div class="lang-en font-semibold text-lg md:text-xl">Extensible protocol: supports crypto asset trusts, family funds, and DeFi applications</div>
               <div class="text-base md:text-lg leading-relaxed">
                 <div class="lang-zh active">依托智能合约钱包能力，可演进多签、Paymaster、策略金库等扩展场景。</div>
                 <div class="lang-en">Leveraging smart-wallet capabilities to evolve into multisig, paymasters, and strategy vaults.</div>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Vision & Outlook -->
+    <section class="slide relative snap-center flex items-center justify-center">
+      <div class="absolute top-6 left-6 z-40">
+        <div class="lang-zh active"><span class="px-4 py-2 rounded-md bg-black/40 text-white text-lg md:text-xl shadow">愿景与展望</span></div>
+        <div class="lang-en"><span class="px-4 py-2 rounded-md bg-black/40 text-white text-lg md:text-xl shadow">Vision & Outlook</span></div>
+      </div>
+      <div class="max-w-8xl w-full grid grid-cols-1 md:grid-cols-12 gap-10 p-8">
+        <!-- Logo -->
+        <div class="flex items-center justify-center md:col-span-4 lg:col-span-4">
+          <svg width="320" height="360" viewBox="0 0 400 450" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="gold-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#DAB974" />
+                <stop offset="100%" style="stop-color:#B88B4A" />
+              </linearGradient>
+            </defs>
+            <rect x="90" y="90" width="220" height="220" rx="5" ry="5" fill="url(#gold-gradient)" />
+            <rect x="100" y="100" width="200" height="200" rx="5" ry="5" fill="#3c4858" />
+            <path d="M 167.5 270 L 232.5 270 L 215.5 190 A 30 30 0 1 0 184.5 190 Z" fill="#FFFFFF" />
+            <text x="200" y="380" font-size="60" text-anchor="middle" font-weight="400">
+              <tspan fill="#3c4858">Family</tspan>
+              <tspan fill="#c5a35a" font-weight="500"> Key</tspan>
+            </text>
+          </svg>
+        </div>
+        <!-- Vision Text -->
+        <div class="flex flex-col items-start justify-center md:col-span-8 lg:col-span-8">
+          <div class="lang-zh active">
+            <h2 class="text-3xl md:text-4xl font-bold mb-4">愿景与展望</h2>
+            <p class="text-xl md:text-2xl leading-relaxed">别把我们的加密资产拱手让给中心化机构，生，它是我们的财富，死，它是我们家人的财富。Family Key，替你的家庭守护你的加密财富。</p>
+          </div>
+          <div class="lang-en">
+            <h2 class="text-4xl md:text-5xl font-bold mb-4">Vision & Outlook</h2>
+            <p class="text-xl md:text-2xl leading-relaxed">Don’t hand our crypto assets to centralized institutions. In life, it’s our wealth; in death, it’s our family’s wealth. Family Key guards your crypto wealth for your family.</p>
           </div>
         </div>
       </div>
