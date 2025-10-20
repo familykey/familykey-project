@@ -12,6 +12,8 @@ import { deadmanSwitchAbi } from '../abi/deadmanSwitch';
 import { useSiweAuth } from './auth/SiweAuthProvider';
 import { detectInjectedWallets, DetectedWallet } from './wallets';
 import { SAFE_ADDRESSES, SAFE_PROXY_FACTORY_ABI, SAFE_ABI } from '../abi/safeContracts';
+import { VAULT_ABI, VAULT_CONFIGS, type VaultProtocol } from '../abi/vaults';
+import DefiStrategyCardSimple from './components/DefiStrategyCardSimple';
 
 type InviteSummary = {
   token: string;
@@ -228,7 +230,7 @@ const stateTone: Record<LifecycleState, string> = {
   EXPIRED: '#b45309',
   CLAIM_PENDING: '#d97706',
   CLAIM_READY: '#dc2626',
-  INHERITED: '#2563eb',
+  INHERITED: 'var(--fk-gold)',
 };
 
 export default function Owner() {
@@ -263,6 +265,7 @@ export default function Owner() {
   const [isCheckingIn, setIsCheckingIn] = useState(false);
   const [availableWallets, setAvailableWallets] = useState<DetectedWallet[]>([]);
   const [selectedWalletId, setSelectedWalletId] = useState<string>('');
+  const [showDefiStrategiesModal, setShowDefiStrategiesModal] = useState(false);
   const nowMs = useNow();
   const ownerAddress = authSession?.address ?? address ?? undefined;
   const ownerCacheKey = ownerAddress?.toLowerCase() ?? 'unknown';
@@ -372,6 +375,22 @@ export default function Owner() {
   const [depositAmount, setDepositAmount] = useState('0.01');
   const [isDepositing, setIsDepositing] = useState(false);
 
+  // --- DeFi Vaults ---
+  const [vaultBalances, setVaultBalances] = useState<Record<VaultProtocol, { balance: number; rewards: number }>>({
+    lido: { balance: 0, rewards: 0 },
+    aave: { balance: 0, rewards: 0 },
+    morpho: { balance: 0, rewards: 0 },
+  });
+  const [vaultTVLs, setVaultTVLs] = useState<Record<VaultProtocol, number>>({
+    lido: 0,
+    aave: 0,
+    morpho: 0,
+  });
+  const [selectedProtocol, setSelectedProtocol] = useState<VaultProtocol>('lido');
+  const [strategyDropdownOpen, setStrategyDropdownOpen] = useState(false);
+  const strategyDropdownPanelRef = useRef<HTMLDivElement | null>(null);
+  const [defiDepositOpenToken, setDefiDepositOpenToken] = useState(0);
+
   const safeAddressReady = safeSnapshot?.address;
 
   const safeBalanceQuery = useQuery<number>({
@@ -404,7 +423,85 @@ export default function Owner() {
   });
 
   const fundEth = safeBalanceQuery.data ?? 0;
+
+  // 计算总的 DeFi 余额（ETH）
+  const totalDefiEth = useMemo(() => {
+    return Object.values(vaultBalances).reduce((sum, vault) => sum + vault.balance + vault.rewards, 0);
+  }, [vaultBalances]);
+
+  // 总余额 = Safe 中的 ETH + DeFi 中的 ETH
+  const totalEth = fundEth + totalDefiEth;
   const fundUsd = fundEth * (ethUsdQuery.data ?? 0);
+  const defiUsd = totalDefiEth * (ethUsdQuery.data ?? 0);
+  const totalUsd = totalEth * (ethUsdQuery.data ?? 0);
+
+  // Query Vault balances
+  useEffect(() => {
+    if (!safeAddressReady) return;
+
+    const fetchVaultBalances = async () => {
+      try {
+        const client = createPublicClient({
+          chain: baseSepolia,
+          transport: http((import.meta as any).env?.VITE_RPC_URL || 'https://sepolia.base.org'),
+        });
+
+        const protocols: VaultProtocol[] = ['lido', 'aave', 'morpho'];
+        const balances: Record<VaultProtocol, { balance: number; rewards: number }> = {
+          lido: { balance: 0, rewards: 0 },
+          aave: { balance: 0, rewards: 0 },
+          morpho: { balance: 0, rewards: 0 },
+        };
+        const tvls: Record<VaultProtocol, number> = { lido: 0, aave: 0, morpho: 0 };
+
+        for (const protocol of protocols) {
+          const config = VAULT_CONFIGS[protocol];
+          try {
+            // Read user deposits
+            const depositResult = await client.readContract({
+              address: config.address,
+              abi: VAULT_ABI,
+              functionName: 'deposits',
+              args: [safeAddressReady as `0x${string}`],
+            });
+
+            // Read user rewards
+            const rewardsResult = await client.readContract({
+              address: config.address,
+              abi: VAULT_ABI,
+              functionName: 'calculateRewards',
+              args: [safeAddressReady as `0x${string}`],
+            });
+
+            // Read TVL
+            const tvlResult = await client.readContract({
+              address: config.address,
+              abi: VAULT_ABI,
+              functionName: 'getTVL',
+              args: [],
+            });
+
+            balances[protocol] = {
+              balance: Number(ethers.utils.formatEther(depositResult || 0)),
+              rewards: Number(ethers.utils.formatEther(rewardsResult || 0)),
+            };
+            tvls[protocol] = Number(ethers.utils.formatEther(tvlResult || 0));
+          } catch (err) {
+            console.warn(`Failed to fetch ${protocol} vault data:`, err);
+          }
+        }
+
+        setVaultBalances(balances);
+        setVaultTVLs(tvls);
+      } catch (error) {
+        console.error('Error fetching vault balances:', error);
+      }
+    };
+
+    fetchVaultBalances();
+    const interval = setInterval(fetchVaultBalances, 15000); // Refresh every 15s
+    return () => clearInterval(interval);
+  }, [safeAddressReady]);
 
   const assets = useMemo(() => {
     const list = [{ symbol: 'ETH', amount: fundEth, icon: '/eth.svg' }];
@@ -413,13 +510,15 @@ export default function Owner() {
 
   const depositToFund = useCallback(async () => {
     if (!safeSnapshot?.address) return;
+    let pollInterval: NodeJS.Timeout | null = null;
+
     try {
       setIsDepositing(true);
       const bundle = await ensureWallet();
       const from = await bundle.signer.getAddress();
       const valueBigNumber = ethers.utils.parseEther(depositAmount || '0');
       const valueHex = valueBigNumber.toHexString();
-      
+
       // 估算 gas（ETH 转账通常需要 21000 gas）
       let gasLimit;
       try {
@@ -430,7 +529,7 @@ export default function Owner() {
         });
         gasLimit = estimated.mul(120).div(100); // 添加 20% 缓冲
         console.log('[depositToFund] 估算的 gas:', estimated.toString(), '带缓冲:', gasLimit.toString());
-        
+
         const gasPrice = await bundle.provider.getGasPrice();
         const estimatedCostWei = gasLimit.mul(gasPrice);
         const estimatedCostEth = ethers.utils.formatEther(estimatedCostWei);
@@ -439,30 +538,87 @@ export default function Owner() {
         console.error('[depositToFund] Gas 估算失败:', estimateError);
         gasLimit = ethers.BigNumber.from('21000'); // ETH 转账的标准 gas
       }
-      
+
+      // 这里会弹出钱包，用户可能需要时间确认
       const txHash = await bundle.ethProvider.request({
         method: 'eth_sendTransaction',
-        params: [{ 
-          from, 
-          to: safeSnapshot.address, 
+        params: [{
+          from,
+          to: safeSnapshot.address,
           value: valueHex,
           gas: gasLimit.toHexString()
         }],
       });
+
+      console.log('[depositToFund] 交易已发送:', txHash);
       window.dispatchEvent(
         new CustomEvent('fk:toast', {
-          detail: { msg: lang === 'zh' ? `已发送存入交易：${txHash}` : `Deposit tx sent: ${txHash}`, timeoutMs: 2600 },
+          detail: { msg: lang === 'zh' ? `交易已发送，等待确认中...` : `Transaction sent, waiting for confirmation...`, timeoutMs: 3000 },
         })
       );
-      await safeBalanceQuery.refetch();
+
+      // 记录存入前的余额
+      const initialBalance = safeBalanceQuery.data ?? 0;
+      console.log('[depositToFund] 初始余额:', initialBalance);
+
+      // 等待交易确认：每秒刷新余额，直到余额发生变化
+      const maxAttempts = 10; // 最多轮询120秒（2分钟）
+      let attempts = 0;
+
+      pollInterval = setInterval(async () => {
+        attempts++;
+        console.log(`[depositToFund] 轮询余额 (${attempts}/${maxAttempts})...`);
+
+        try {
+          const result = await safeBalanceQuery.refetch();
+          const newBalance = result.data ?? 0;
+          console.log('[depositToFund] 当前余额:', newBalance, '变化:', newBalance - initialBalance);
+
+          // 如果余额变化了（考虑精度），停止轮询
+          if (Math.abs(newBalance - initialBalance) > 0.0001) {
+            if (pollInterval) clearInterval(pollInterval);
+            setIsDepositing(false);
+            console.log('[depositToFund] ✓ 余额已更新');
+            window.dispatchEvent(
+              new CustomEvent('fk:toast', {
+                detail: { msg: lang === 'zh' ? '✓ 存入成功，余额已更新' : '✓ Deposit successful, balance updated', timeoutMs: 3000 },
+              })
+            );
+          }
+          // 超时后停止轮询
+          else if (attempts >= maxAttempts) {
+            if (pollInterval) clearInterval(pollInterval);
+            setIsDepositing(false);
+            console.log('[depositToFund] ⚠ 轮询超时，但交易可能仍在处理中');
+            window.dispatchEvent(
+              new CustomEvent('fk:toast', {
+                detail: { msg: lang === 'zh' ? '交易已发送，但确认时间较长，请稍后手动刷新' : 'Transaction sent but taking longer than expected, please refresh manually later', timeoutMs: 5000 },
+              })
+            );
+          }
+        } catch (refetchError) {
+          console.error('[depositToFund] 刷新余额失败:', refetchError);
+        }
+      }, 1000); // 每秒轮询一次
+
     } catch (error: any) {
-      window.dispatchEvent(
-        new CustomEvent('fk:toast', { detail: { msg: error?.message || String(error), timeoutMs: 3000 } })
-      );
-    } finally {
+      console.error('[depositToFund] 错误:', error);
+
+      // 清理轮询
+      if (pollInterval) clearInterval(pollInterval);
       setIsDepositing(false);
+
+      // 更友好的错误提示
+      let errorMsg = error?.message || String(error);
+      if (errorMsg.includes('User rejected') || errorMsg.includes('User denied')) {
+        errorMsg = lang === 'zh' ? '用户取消了交易' : 'Transaction cancelled by user';
+      }
+
+      window.dispatchEvent(
+        new CustomEvent('fk:toast', { detail: { msg: errorMsg, timeoutMs: 3000 } })
+      );
     }
-  }, [safeSnapshot?.address, depositAmount, lang]);
+  }, [safeSnapshot?.address, depositAmount, lang, safeBalanceQuery]);
 
   const copySafeAddress = useCallback(async () => {
     if (!safeSnapshot?.address) return;
@@ -479,6 +635,92 @@ export default function Owner() {
       );
     }
   }, [safeSnapshot?.address, lang]);
+
+  // Deposit to DeFi Vault
+  const depositToVault = useCallback(async (protocol: VaultProtocol, amount: string) => {
+    if (!safeSnapshot?.address) return;
+    try {
+      const bundle = await ensureWallet();
+      const config = VAULT_CONFIGS[protocol];
+      const valueBigNumber = ethers.utils.parseEther(amount || '0');
+
+      // Create Safe contract instance
+      const safeContract = new ethers.Contract(safeSnapshot.address, SAFE_ABI, bundle.signer);
+
+      // Encode deposit() call
+      const vaultInterface = new ethers.utils.Interface(VAULT_ABI);
+      const depositData = vaultInterface.encodeFunctionData('deposit', []);
+
+      // Get owner for signature
+      const owner = await bundle.signer.getAddress();
+      const signature = '0x' + owner.toLowerCase().slice(2).padStart(64, '0') + '0'.repeat(64) + '01';
+
+      // Estimate gas
+      let gasLimit;
+      try {
+        const estimatedGas = await safeContract.estimateGas.execTransaction(
+          config.address,
+          valueBigNumber,
+          depositData,
+          0, // Call
+          0, 0, 0,
+          ethers.constants.AddressZero,
+          ethers.constants.AddressZero,
+          signature
+        );
+        gasLimit = estimatedGas.mul(120).div(100);
+      } catch (estimateError: any) {
+        console.error('[depositToVault] Gas estimation failed:', estimateError);
+        gasLimit = ethers.BigNumber.from('500000');
+      }
+
+      // Execute transaction via Safe
+      const tx = await safeContract.execTransaction(
+        config.address,      // to
+        valueBigNumber,      // value (ETH to send)
+        depositData,         // data
+        0,                   // operation (Call)
+        0, 0, 0,            // gas params
+        ethers.constants.AddressZero,  // gasToken
+        ethers.constants.AddressZero,  // refundReceiver
+        signature,
+        { gasLimit }
+      );
+
+      window.dispatchEvent(
+        new CustomEvent('fk:toast', {
+          detail: {
+            msg: lang === 'zh'
+              ? `存入 ${config.name} 交易已发送：${tx.hash.slice(0, 10)}...`
+              : `Deposit to ${config.name} sent: ${tx.hash.slice(0, 10)}...`,
+            timeoutMs: 3000
+          },
+        })
+      );
+
+      await tx.wait();
+
+      window.dispatchEvent(
+        new CustomEvent('fk:toast', {
+          detail: {
+            msg: lang === 'zh' ? `✓ 存入成功！` : `✓ Deposit successful!`,
+            timeoutMs: 2600
+          },
+        })
+      );
+
+      // Refresh balances
+      await safeBalanceQuery.refetch();
+    } catch (error: any) {
+      console.error('[depositToVault] Error:', error);
+      window.dispatchEvent(
+        new CustomEvent('fk:toast', {
+          detail: { msg: error?.message || String(error), timeoutMs: 4000 }
+        })
+      );
+      throw error;
+    }
+  }, [safeSnapshot?.address, lang, safeBalanceQuery]);
 
   useEffect(() => {
     if (!selectedBeneficiary && beneficiaries.length > 0) {
@@ -1104,9 +1346,9 @@ export default function Owner() {
       );
       
       window.dispatchEvent(new CustomEvent('fk:toast', { 
-        detail: { msg: (lang === 'zh' ? 'Safe 创建已提交' : 'Safe deployment submitted'), timeoutMs: 2800 } 
+        detail: { msg: (lang === 'zh' ? '合约钱包创建已提交，等待第二次签名' : 'Contract wallet deployment submitted, waiting for the second signature'), timeoutMs: 2800 } 
       }));
-      setLog(`${lang === 'zh' ? 'Safe 部署交易已发送，哈希：' : 'Safe deployment sent. Tx:'} ${deployTx.hash}`);
+      setLog(`${lang === 'zh' ? '合约钱包部署交易已发送，哈希：' : 'Contract wallet deployment sent. Tx:'} ${deployTx.hash}`);
       
       // 4. 等待交易确认并获取实际 Safe 地址
       const receipt = await deployTx.wait();
@@ -1132,7 +1374,7 @@ export default function Owner() {
       
       // 验证 Safe 是否真的被部署（带重试机制）
       let code = '0x';
-      let retries = 10;
+      let retries = 20;
       while (retries > 0) {
         console.log(`[createSafeAndDeploy] 检查合约代码 (剩余重试: ${retries})...`);
         code = await bundle.provider.getCode(actualSafeAddress);
@@ -1388,7 +1630,7 @@ export default function Owner() {
                     )}
                     {lifecycle.state === 'INHERITED' && (
                       <>
-                        {lang === 'zh' ? 'Safe 所有权已转移至受益人。' : 'Safe ownership has moved to the beneficiary.'}
+                        {lang === 'zh' ? '基金所有权已转移至受益人。' : 'Fund ownership has moved to the beneficiary.'}
                       </>
                     )}
                   </div>
@@ -1433,7 +1675,7 @@ export default function Owner() {
                 </div>
 
                 <div className="row" style={{ gap: 8 }}>
-                  {moduleAddress && (lifecycle.state === 'ALIVE' || lifecycle.state === 'EXPIRED' || lifecycle.state === 'CLAIM_READY') && (
+                  {moduleAddress && (lifecycle.state === 'ALIVE' || lifecycle.state === 'EXPIRED' || lifecycle.state === 'CLAIM_READY' || lifecycle.state === 'CLAIM_PENDING') && (
                     <button className="btn btn-gold" onClick={checkIn} disabled={isCheckingIn}>
                       {isCheckingIn ? (lang === 'zh' ? '签到中…' : 'Checking in…') : (lang === 'zh' ? '心跳签到' : 'Heartbeat Check-In')}
                     </button>
@@ -1580,7 +1822,7 @@ export default function Owner() {
                       </button>
                       {(isDeploying || beneficiaries.length === 0) && (
                         <div className="muted" style={{ fontSize: 12, marginTop: 6, textAlign: 'center' }}>
-                          {isDeploying && (lang === 'zh' ? '⏳ 部署中，请稍候...' : '⏳ Deploying, please wait...')}
+                          {isDeploying && (lang === 'zh' ? '⏳ 开始部署，需要二次签名...' : '⏳ Start deploying, need two signatures...')}
                           {!isDeploying && beneficiaries.length === 0 && (lang === 'zh' ? '⚠️ 按钮已禁用：需要先添加受益人' : '⚠️ Button disabled: Add a beneficiary first')}
                         </div>
                       )}
@@ -1703,12 +1945,39 @@ export default function Owner() {
             {address ? (
               <>
                 <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 26 }}>
-                  <div className="card" style={{ background: 'rgba(218, 185, 116, 0.12)', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start', padding: '10px 14px', borderColor: 'var(--fk-gold-2)' }}>
-                    <div className="label" style={{ margin: 0, color: 'var(--fk-gold-1)' }}>{lang === 'zh' ? '美元余额' : 'USD Balance'}</div>
-                    <div style={{ fontSize: 22, fontWeight: 700 }}>${(fundUsd || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
-                    <div className="muted" style={{ fontSize: 12 }}>{(fundEth || 0).toFixed(4)} ETH</div>
+                  <div className="card" style={{ background: 'rgba(218, 185, 116, 0.12)', padding: '10px 14px', borderColor: 'var(--fk-gold-2)' }}>
+                    <div className="row" style={{ alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div className="label" style={{ margin: 0, color: 'var(--fk-gold-1)' }}>{lang === 'zh' ? '总美元余额' : 'Total USD Balance'}</div>
+                        <div style={{ fontSize: 22, fontWeight: 700 }}>${(totalUsd || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+                        <div className="muted" style={{ fontSize: 12 }}>{(totalEth || 0).toFixed(4)} ETH</div>
+                      </div>
+
+                      {/* 迷你 DeFi 质押卡片（置于右侧） */}
+                      <div style={{ flex: '0 0 220px', maxWidth: 280, width: '100%' }}>
+                        <div className="label" style={{ fontSize: 11, color: '#6b7280' }}>{lang === 'zh' ? '当前质押的 DeFi' : 'Staked DeFi'}</div>
+                        <div className="card" style={{ marginTop: 6, padding: '8px 10px', border: '1px solid var(--fk-border)', borderRadius: 8, background: '#fafafa' }}>
+                          {((Object.keys(VAULT_CONFIGS) as VaultProtocol[]).filter((p) => vaultBalances[p].balance > 0).length > 0) ? (
+                            (Object.keys(VAULT_CONFIGS) as VaultProtocol[]).filter((p) => vaultBalances[p].balance > 0).map((p) => (
+                              <div key={p} className="row" style={{ justifyContent: 'space-between', width: '100%', padding: '4px 0' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <img
+                                    src={p === 'lido' ? '/lido-dao-ldo-logo.png' : (p === 'aave' ? '/aave-aave-logo.png' : '/maker-mkr-logo.png')}
+                                    alt={VAULT_CONFIGS[p].name}
+                                    style={{ width: 16, height: 16, borderRadius: 4 }}
+                                  />
+                                  <div style={{ fontSize: 12, fontWeight: 500 }}>{VAULT_CONFIGS[p].name}</div>
+                                </div>
+                                <div style={{ fontSize: 12, fontWeight: 600 }}>{vaultBalances[p].balance.toFixed(4)} ETH</div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="muted" style={{ fontSize: 12 }}>{lang === 'zh' ? '暂无质押' : 'No staking yet'}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  
                 </div>
 
                 <div style={{ marginTop: 12 }}>
@@ -1757,6 +2026,100 @@ export default function Owner() {
                       {lang === 'zh' ? '复制地址' : 'Copy'}
                     </button>
                   </div>
+
+                {/* DeFi Yield Strategies Section */}
+                <div style={{ marginTop: 6, paddingTop: 6, borderTop: '2px dashed #e5e7eb' }}>
+                  <div className="section-title" style={{ marginBottom: 8 }}>
+                    {lang === 'zh' ? 'DeFi 收益策略' : 'DeFi Yield Strategies'}
+                  </div>
+                  <p className="muted" style={{ fontSize: 13, marginBottom: 16, lineHeight: 1.6 }}>
+                    {lang === 'zh'
+                      ? '选择收益策略，让家庭基金产生收益。'
+                      : 'Select yield strategies to generate yield for your family fund.'}
+                  </p>
+
+                  {/* DeFi Strategies Selector */}
+                  <div style={{ width: '100%' }}>
+                    <div style={{ position: 'relative' }}>
+                      <button
+                        type="button"
+                        className="input"
+                        onClick={() => {
+                          const next = !strategyDropdownOpen;
+                          setStrategyDropdownOpen(next);
+                          if (next) {
+                            setTimeout(() => {
+                              const panel = strategyDropdownPanelRef.current;
+                              if (!panel) return;
+                              const rect = panel.getBoundingClientRect();
+                              const viewportHeight = window.innerHeight;
+                              const desiredGap = 48; // 页面底部预留空白距离
+                              const bottomDiff = rect.bottom - viewportHeight;
+                              if (bottomDiff > -desiredGap) {
+                                window.scrollBy({ top: bottomDiff + desiredGap, behavior: 'smooth' });
+                              }
+                            }, 0);
+                          }
+                        }}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <img
+                            src={selectedProtocol === 'lido' ? '/lido-dao-ldo-logo.png' : (selectedProtocol === 'aave' ? '/aave-aave-logo.png' : '/maker-mkr-logo.png')}
+                            alt={VAULT_CONFIGS[selectedProtocol].name}
+                            style={{ width: 20, height: 20, borderRadius: 4 }}
+                          />
+                          <span style={{ textAlign: 'left' }}>{VAULT_CONFIGS[selectedProtocol].name}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto', gap: 8 }}>
+                          <span style={{ textAlign: 'right' }}>{VAULT_CONFIGS[selectedProtocol].apy}% APR</span>
+                          <span style={{ opacity: 0.8 }}>▼</span>
+                        </div>
+                      </button>
+                      {strategyDropdownOpen && (
+                        <div
+                          className="card"
+                          ref={strategyDropdownPanelRef}
+                          style={{
+                            position: 'absolute',
+                            top: 'calc(100% + 6px)',
+                            left: 0,
+                            right: 0,
+                            zIndex: 1000,
+                            background: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: 8,
+                            boxShadow: '0 10px 24px rgba(0,0,0,0.1)',
+                            overflow: 'hidden'
+                          }}
+                        >
+                          {(Object.keys(VAULT_CONFIGS) as VaultProtocol[]).map((p) => {
+                            const cfg = VAULT_CONFIGS[p];
+                            return (
+                              <div
+                                key={p}
+                                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', cursor: 'pointer' }}
+                                onClick={() => { setSelectedProtocol(p); setStrategyDropdownOpen(false); setShowDefiStrategiesModal(false); setDefiDepositOpenToken((t) => t + 1); }}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = '#f9fafb'; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <img
+                                    src={p === 'lido' ? '/lido-dao-ldo-logo.png' : (p === 'aave' ? '/aave-aave-logo.png' : '/maker-mkr-logo.png')}
+                                    alt={cfg.name}
+                                    style={{ width: 18, height: 18, borderRadius: 4 }}
+                                  />
+                                  <span style={{ textAlign: 'left' }}>{cfg.name}</span>
+                                </div>
+                                <span style={{ marginLeft: 12, textAlign: 'right' }}>{`${cfg.apy}% APR`}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </>
               
             ) : (
@@ -1766,6 +2129,127 @@ export default function Owner() {
         )}
       </div>
 
+      {/* Hidden deposit modal trigger-only card */}
+      <DefiStrategyCardSimple
+        protocol={selectedProtocol}
+        safeAddress={safeSnapshot?.address || ''}
+        onDeposit={depositToVault}
+        lang={lang}
+        hideCardBody={true}
+        externalOpenToken={defiDepositOpenToken}
+        fundEth={fundEth}
+      />
+
+      {/* DeFi Strategies Modal */}
+      {showDefiStrategiesModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            padding: 20,
+            overflow: 'auto',
+          }}
+          onClick={() => setShowDefiStrategiesModal(false)}
+        >
+          <div
+            style={{
+              maxWidth: 1200,
+              width: '100%',
+              background: '#fff',
+              borderRadius: 16,
+              padding: '32px 28px',
+              maxHeight: '90vh',
+              overflow: 'auto',
+              boxShadow: '0 24px 48px rgba(0, 0, 0, 0.2)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <div>
+                <div className="section-title" style={{ marginBottom: 4 }}>
+                  {lang === 'zh' ? '💰 DeFi 收益策略' : '💰 DeFi Yield Strategies'}
+                </div>
+                <p className="muted" style={{ fontSize: 14, margin: 0 }}>
+                  {lang === 'zh'
+                    ? '选择适合的协议投资，为家族基金创造收益'
+                    : 'Choose protocols to invest and generate yield for your family fund'}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowDefiStrategiesModal(false)}
+                style={{
+                  border: 0,
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  fontSize: 32,
+                  color: '#9ca3af',
+                  padding: 0,
+                  lineHeight: 1,
+                  width: 40,
+                  height: 40,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 8,
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#f3f4f6';
+                  e.currentTarget.style.color = '#374151';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = '#9ca3af';
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Strategy Card - Selected Only */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20 }}>
+              <DefiStrategyCardSimple
+                protocol={selectedProtocol}
+                safeAddress={safeSnapshot?.address || ''}
+                onDeposit={depositToVault}
+                lang={lang}
+                fundEth={fundEth}
+              />
+            </div>
+
+            {/* Modal Footer */}
+            <div
+              style={{
+                marginTop: 24,
+                paddingTop: 20,
+                borderTop: '1px solid #e5e7eb',
+                display: 'flex',
+                justifyContent: 'center',
+              }}
+            >
+              <button
+                className="btn"
+                onClick={() => setShowDefiStrategiesModal(false)}
+                style={{
+                  minWidth: 160,
+                  padding: '10px 24px',
+                }}
+              >
+                {lang === 'zh' ? '关闭' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

@@ -3,6 +3,11 @@ import { usePrivy, useWallets } from '@privy-io/react-auth';
 import Claim from './Claim';
 import { apiUrl } from '../config/api';
 import { useI18n } from './i18n';
+import { useQuery } from '@tanstack/react-query';
+import { ethers } from 'ethers';
+import { createPublicClient, http } from 'viem';
+import { baseSepolia } from 'viem/chains';
+import { SAFE_ABI } from '../abi/safeContracts';
 
 type InviteInfo = {
   token: string;
@@ -76,7 +81,7 @@ const formatDateTime = (value?: string | null) => {
 };
 
 export default function Beneficiary() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { ready, authenticated, login, logout, user } = usePrivy();
   const { wallets } = useWallets();
   const [email, setEmail] = useState('');
@@ -364,6 +369,165 @@ export default function Beneficiary() {
     return selectableModules.find((item) => item.moduleAddress === selectedModuleAddress) ?? selectableModules[0];
   }, [selectableModules, selectedModuleAddress]);
 
+  // --- Funds & Transfer after inheritance ---
+  const safeAddressReady = selectedModule?.safeAddress;
+
+  const safeBalanceQuery = useQuery<number>({
+    queryKey: ['safe-balance', safeAddressReady],
+    enabled: !!safeAddressReady && selectedModule?.lifecycle?.state === 'INHERITED',
+    refetchInterval: 15000,
+    queryFn: async () => {
+      const client = createPublicClient({
+        chain: baseSepolia,
+        transport: http((import.meta as any).env?.VITE_RPC_URL || 'https://sepolia.base.org'),
+      });
+      const bal = await client.getBalance({ address: safeAddressReady as `0x${string}` });
+      return Number(ethers.utils.formatEther(bal));
+    },
+  });
+
+  const ethUsdQuery = useQuery<number>({
+    queryKey: ['price-eth-usd'],
+    enabled: !!safeAddressReady && selectedModule?.lifecycle?.state === 'INHERITED',
+    staleTime: 60000,
+    queryFn: async () => {
+      try {
+        const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
+        const json = await res.json();
+        return Number(json?.ethereum?.usd ?? 0);
+      } catch {
+        return 0;
+      }
+    },
+  });
+
+  const fundEth = safeBalanceQuery.data ?? 0;
+  const fundUsd = fundEth * (ethUsdQuery.data ?? 0);
+
+  const [transferTo, setTransferTo] = useState('');
+  const [transferAmount, setTransferAmount] = useState('');
+  const [isTransferring, setIsTransferring] = useState(false);
+
+  const copySafeAddress = useCallback(async () => {
+    if (!safeAddressReady) return;
+    try {
+      await navigator.clipboard.writeText(safeAddressReady);
+      window.dispatchEvent(new CustomEvent('fk:toast', { detail: { msg: '地址已复制', timeoutMs: 2000 } }));
+    } catch {}
+  }, [safeAddressReady]);
+
+  const transferFromFund = useCallback(async () => {
+    if (!selectedModule?.safeAddress) return;
+    try {
+      if (!ready) {
+        window.dispatchEvent(new CustomEvent('fk:toast', { detail: { msg: 'Privy 正在初始化，请稍候…', timeoutMs: 2500 } }));
+        return;
+      }
+      if (!authenticated) {
+        await login({ loginMethods: ['email', 'sms'] });
+        return;
+      }
+      setIsTransferring(true);
+      const to = transferTo.trim();
+      const amount = transferAmount.trim();
+      if (!to) {
+        window.dispatchEvent(new CustomEvent('fk:toast', { detail: { msg: '请输入目标地址', timeoutMs: 2500 } }));
+        return;
+      }
+      if (!amount || Number(amount) <= 0) {
+        window.dispatchEvent(new CustomEvent('fk:toast', { detail: { msg: '请输入正确的金额（ETH）', timeoutMs: 2500 } }));
+        return;
+      }
+      if (Number(amount) > (fundEth || 0)) {
+        window.dispatchEvent(new CustomEvent('fk:toast', { detail: { msg: '金额超过当前余额', timeoutMs: 2500 } }));
+        return;
+      }
+      const provider = await embeddedWallet?.getEthereumProvider?.();
+      if (!provider) {
+        window.dispatchEvent(new CustomEvent('fk:toast', { detail: { msg: '嵌入式钱包暂时不可用', timeoutMs: 2500 } }));
+        return;
+      }
+      const expectedChainId = `0x${baseSepolia.id.toString(16)}`;
+      const chainId = await provider.request({ method: 'eth_chainId' });
+      if (chainId !== expectedChainId) {
+        try {
+          await provider.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: expectedChainId }],
+          });
+        } catch (switchErr: any) {
+          if (switchErr?.code === 4902) {
+            try {
+              await provider.request({
+                method: 'wallet_addEthereumChain',
+                params: [{
+                  chainId: expectedChainId,
+                  chainName: 'Base Sepolia',
+                  nativeCurrency: { name: 'Base Sepolia ETH', symbol: 'ETH', decimals: 18 },
+                  rpcUrls: [import.meta.env.VITE_RPC_URL],
+                  blockExplorerUrls: ['https://sepolia.basescan.org'],
+                }],
+              });
+            } catch (addErr: any) {
+              window.dispatchEvent(new CustomEvent('fk:toast', { detail: { msg: `无法添加网络：${addErr?.message || addErr}`, timeoutMs: 3000 } }));
+              return;
+            }
+          } else {
+            window.dispatchEvent(new CustomEvent('fk:toast', { detail: { msg: `请切换到 Base Sepolia：${switchErr?.message || switchErr}` , timeoutMs: 3000 } }));
+            return;
+          }
+        }
+      }
+      const web3Provider = new ethers.providers.Web3Provider(provider);
+      const signer = web3Provider.getSigner();
+      const safeContract = new ethers.Contract(selectedModule.safeAddress, SAFE_ABI, signer);
+      const owner = await signer.getAddress();
+      const signature = '0x' + owner.toLowerCase().slice(2).padStart(64, '0') + '0'.repeat(64) + '01';
+      const valueBN = ethers.utils.parseEther(amount || '0');
+
+      let gasLimit: any;
+      try {
+        const estimatedGas = await safeContract.estimateGas.execTransaction(
+          to,
+          valueBN,
+          '0x',
+          0,
+          0,
+          0,
+          0,
+          ethers.constants.AddressZero,
+          ethers.constants.AddressZero,
+          signature
+        );
+        gasLimit = estimatedGas.mul(120).div(100);
+      } catch (e: any) {
+        gasLimit = ethers.BigNumber.from('300000');
+      }
+
+      const tx = await safeContract.execTransaction(
+        to,
+        valueBN,
+        '0x',
+        0,
+        0,
+        0,
+        0,
+        ethers.constants.AddressZero,
+        ethers.constants.AddressZero,
+        signature,
+        { gasLimit }
+      );
+      const shortHash = tx.hash.length > 18 ? `${tx.hash.slice(0, 10)}…${tx.hash.slice(-4)}` : tx.hash;
+      window.dispatchEvent(new CustomEvent('fk:toast', { detail: { msg: `转账已提交：${shortHash}` , timeoutMs: 3000 } }));
+      await safeBalanceQuery.refetch();
+      setTransferAmount('');
+    } catch (error: any) {
+      window.dispatchEvent(new CustomEvent('fk:toast', { detail: { msg: error?.message || String(error), timeoutMs: 3200 } }));
+    } finally {
+      setIsTransferring(false);
+    }
+  }, [selectedModule?.safeAddress, ready, authenticated, login, embeddedWallet, transferTo, transferAmount, fundEth, safeBalanceQuery]);
+
   useEffect(() => {
     // clear any previously scheduled refresh
     if (autoRefreshTimeoutRef.current) {
@@ -529,16 +693,63 @@ export default function Beneficiary() {
                               {t('beneficiary_inheritance_last_updated')}: {formatDateTime(lastModulesRefresh)}
                             </div>
                           )} */}
-                          <Claim
-                            showOwnerCheckIn={false}
-                            showCancel={false}
-                            showReadStatus={false}
-                            initialModuleAddress={selectedModule.moduleAddress ?? undefined}
-                            allowModuleInput={false}
-                            minimal={true}
-                            onRefresh={() => walletAddress && loadModules(walletAddress)}
-                            refreshKey={`${selectedModule.moduleAddress ?? ''}:${selectedModule.lifecycle?.state ?? ''}:${lastModulesRefresh ?? ''}`}
-                          />
+                          {selectedModule.lifecycle?.state === 'INHERITED' ? (
+                            <>
+                              <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 8 }}>
+                                <div className="card" style={{ background: 'rgba(218, 185, 116, 0.12)', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start', padding: '10px 14px', borderColor: 'var(--fk-gold-2)' }}>
+                                  <div className="label" style={{ margin: 0, color: 'var(--fk-gold-1)' }}>{lang === 'zh' ? '美元余额' : 'USD Balance'}</div>
+                                  <div style={{ fontSize: 22, fontWeight: 700 }}>${(fundUsd || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+                                  <div className="muted" style={{ fontSize: 12 }}>{(fundEth || 0).toFixed(4)} ETH</div>
+                                </div>
+                              </div>
+
+
+
+                              <div className="row" style={{ gap: 8, marginTop: 12 }}>
+                                <input
+                                  className="input"
+                                  type="text"
+                                  value={transferTo}
+                                  onChange={(e) => setTransferTo(e.target.value)}
+                                  placeholder={lang === 'zh' ? '转出到地址' : 'Recipient address'}
+                                  style={{ flex: '2 1 auto' }}
+                                />
+                                <input
+                                  className="input"
+                                  type="number"
+                                  min={0}
+                                  step="0.001"
+                                  value={transferAmount}
+                                  onChange={(e) => setTransferAmount(e.target.value)}
+                                  placeholder={lang === 'zh' ? '数量（ETH）' : 'Amount (ETH)'}
+                                  style={{ flex: '1 1 auto' }}
+                                />
+                                <button
+                                  className="btn"
+                                  type="button"
+                                  onClick={() => setTransferAmount(((fundEth || 0)).toString())}
+                                  style={{ flexShrink: 0, color: 'var(--fk-gold)', borderColor: 'var(--fk-gold-2)', background: 'transparent' }}
+                                >
+                                  Max
+                                </button>
+                                <button className="btn btn-gold" onClick={transferFromFund} disabled={isTransferring} style={{ flexShrink: 0 }}>
+                                  {isTransferring ? (lang === 'zh' ? '转出中…' : 'Transferring…') : (lang === 'zh' ? '转出资金' : 'Transfer')}
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <Claim
+                              showOwnerCheckIn={false}
+                              showCancel={false}
+                              showReadStatus={false}
+                              showFinalizeClaim={false}
+                              initialModuleAddress={selectedModule.moduleAddress ?? undefined}
+                              allowModuleInput={false}
+                              minimal={true}
+                              onRefresh={() => walletAddress && loadModules(walletAddress)}
+                              refreshKey={`${selectedModule.moduleAddress ?? ''}:${selectedModule.lifecycle?.state ?? ''}:${lastModulesRefresh ?? ''}`}
+                            />
+                          )}
                         </div>
                       )}
                     </>
